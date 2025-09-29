@@ -1,0 +1,596 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CRM System</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <!-- Login/Register Modal -->
+    <div id="authModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="authTitle">Login to CRM</h2>
+                <button class="modal-close" id="closeAuth">&times;</button>
+            </div>
+            <div class="modal-body">
+                <form id="authForm">
+                    <div class="form-group">
+                        <label class="form-label" for="username">Username</label>
+                        <input type="text" id="username" class="form-control" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="password">Password</label>
+                        <input type="password" id="password" class="form-control" required>
+                    </div>
+                    <div class="form-group" id="registerFields" style="display: none;">
+                        <label class="form-label" for="email">Email</label>
+                        <input type="email" id="email" class="form-control">
+                        <label class="form-label" for="firstName">First Name</label>
+                        <input type="text" id="firstName" class="form-control">
+                        <label class="form-label" for="lastName">Last Name</label>
+                        <input type="text" id="lastName" class="form-control">
+                        <label class="form-label" for="role">Role</label>
+                        <select id="role" class="form-control">
+                            <option value="sales_rep">Sales Rep</option>
+                            <option value="manager">Manager</option>
+                            <option value="admin">Admin</option>
+                        </select>
+                    </div>
+                    <div class="flex gap-8">
+                        <button type="submit" class="btn btn--primary" id="authSubmit">Login</button>
+                        <button type="button" class="btn btn--secondary" id="toggleAuth">Register</button>
+                    </div>
+                </form>
+                <div class="demo-credentials">
+                    <p><strong>Demo Credentials:</strong></p>
+                    <p>Admin: admin / admin123</p>
+                    <p>Sales Rep: john_sales / sales123</p>
+                    <p>Manager: sarah_manager / manager123</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Application -->
+    <div id="app" class="hidden">
+        <!-- Header -->
+        <header class="header">
+            <div class="header-left">
+                <button class="btn btn--outline btn--sm" id="sidebarToggle">☰</button>
+                <h1 class="app-title">CRM System</h1>
+            </div>
+            <div class="header-right">
+                <span class="user-info">Welcome, <span id="currentUser"></span></span>
+                <button class="btn btn--secondary btn--sm" id="logoutBtn">Logout</button>
+            </div>
+        </header>
+
+        <!-- Sidebar -->
+        <aside class="sidebar" id="sidebar">
+            <nav class="nav">
+                <a href="#" class="nav-link active" data-section="dashboard">📊 Dashboard</a>
+                <a href="#" class="nav-link" data-section="contacts">👥 Contacts</a>
+                <a href="#" class="nav-link" data-section="leads">🎯 Leads</a>
+                <a href="#" class="nav-link" data-section="deals">💼 Deals</a>
+                <a href="#" class="nav-link" data-section="activities">📅 Activities</a>
+                <a href="#" class="nav-link" data-section="reports">📈 Reports</a>
+            </nav>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Dashboard Section -->
+            <section id="dashboard" class="section active">
+                <div class="section-header">
+                    <h2>Dashboard</h2>
+                    <div class="section-actions">
+                        <button class="btn btn--primary" id="addContactBtn">+ Add Contact</button>
+                        <button class="btn btn--primary" id="addLeadBtn">+ Add Lead</button>
+                        <button class="btn btn--primary" id="addDealBtn">+ Add Deal</button>
+                    </div>
+                </div>
+
+                <!-- KPI Cards -->
+                <div class="kpi-grid">
+                    <div class="kpi-card">
+                        <div class="kpi-icon">👥</div>
+                        <div class="kpi-content">
+                            <h3 id="totalContacts">0</h3>
+                            <p>Total Contacts</p>
+                        </div>
+                    </div>
+                    <div class="kpi-card">
+                        <div class="kpi-icon">🎯</div>
+                        <div class="kpi-content">
+                            <h3 id="activeLeads">0</h3>
+                            <p>Active Leads</p>
+                        </div>
+                    </div>
+                    <div class="kpi-card">
+                        <div class="kpi-icon">💼</div>
+                        <div class="kpi-content">
+                            <h3 id="dealsInPipeline">0</h3>
+                            <p>Deals in Pipeline</p>
+                        </div>
+                    </div>
+                    <div class="kpi-card">
+                        <div class="kpi-icon">💰</div>
+                        <div class="kpi-content">
+                            <h3 id="revenueThisMonth">$0</h3>
+                            <p>Revenue This Month</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Charts -->
+                <div class="charts-grid">
+                    <div class="chart-container" style="position: relative; height: 300px;">
+                        <h3>Sales Pipeline</h3>
+                        <canvas id="pipelineChart"></canvas>
+                    </div>
+                    <div class="chart-container" style="position: relative; height: 300px;">
+                        <h3>Revenue Trend</h3>
+                        <canvas id="revenueChart"></canvas>
+                    </div>
+                    <div class="chart-container" style="position: relative; height: 300px;">
+                        <h3>Lead Sources</h3>
+                        <canvas id="leadSourceChart"></canvas>
+                    </div>
+                    <div class="chart-container" style="position: relative; height: 300px;">
+                        <h3>Activity Summary</h3>
+                        <canvas id="activityChart"></canvas>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Contacts Section -->
+            <section id="contacts" class="section">
+                <div class="section-header">
+                    <h2>Contacts</h2>
+                    <div class="section-actions">
+                        <input type="text" placeholder="Search contacts..." class="form-control search-input" id="contactSearch">
+                        <select class="form-control" id="contactFilter">
+                            <option value="">All Sources</option>
+                            <option value="website">Website</option>
+                            <option value="referral">Referral</option>
+                            <option value="campaign">Campaign</option>
+                            <option value="social_media">Social Media</option>
+                            <option value="trade_show">Trade Show</option>
+                        </select>
+                        <button class="btn btn--primary" id="addContactModal">+ Add Contact</button>
+                    </div>
+                </div>
+                <div class="data-table">
+                    <table id="contactsTable">
+                        <thead>
+                            <tr>
+                                <th>Name</th>
+                                <th>Company</th>
+                                <th>Email</th>
+                                <th>Phone</th>
+                                <th>Source</th>
+                                <th>Owner</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="contactsTableBody">
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+            <!-- Leads Section -->
+            <section id="leads" class="section">
+                <div class="section-header">
+                    <h2>Leads</h2>
+                    <div class="section-actions">
+                        <input type="text" placeholder="Search leads..." class="form-control search-input" id="leadSearch">
+                        <select class="form-control" id="leadStatusFilter">
+                            <option value="">All Status</option>
+                            <option value="new">New</option>
+                            <option value="contacted">Contacted</option>
+                            <option value="qualified">Qualified</option>
+                            <option value="lost">Lost</option>
+                        </select>
+                        <select class="form-control" id="leadScoreFilter">
+                            <option value="">All Scores</option>
+                            <option value="hot">Hot</option>
+                            <option value="warm">Warm</option>
+                            <option value="cold">Cold</option>
+                        </select>
+                        <button class="btn btn--primary" id="addLeadModal">+ Add Lead</button>
+                    </div>
+                </div>
+                <div class="data-table">
+                    <table id="leadsTable">
+                        <thead>
+                            <tr>
+                                <th>Name</th>
+                                <th>Company</th>
+                                <th>Email</th>
+                                <th>Status</th>
+                                <th>Score</th>
+                                <th>Value</th>
+                                <th>Source</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="leadsTableBody">
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+            <!-- Deals Section -->
+            <section id="deals" class="section">
+                <div class="section-header">
+                    <h2>Sales Pipeline</h2>
+                    <div class="section-actions">
+                        <button class="btn btn--primary" id="addDealModal">+ Add Deal</button>
+                    </div>
+                </div>
+                <div class="pipeline-container">
+                    <div class="pipeline-stage" data-stage="prospecting">
+                        <h3>Prospecting</h3>
+                        <div class="deal-cards" id="prospecting-deals"></div>
+                    </div>
+                    <div class="pipeline-stage" data-stage="qualification">
+                        <h3>Qualification</h3>
+                        <div class="deal-cards" id="qualification-deals"></div>
+                    </div>
+                    <div class="pipeline-stage" data-stage="proposal">
+                        <h3>Proposal</h3>
+                        <div class="deal-cards" id="proposal-deals"></div>
+                    </div>
+                    <div class="pipeline-stage" data-stage="negotiation">
+                        <h3>Negotiation</h3>
+                        <div class="deal-cards" id="negotiation-deals"></div>
+                    </div>
+                    <div class="pipeline-stage" data-stage="closed_won">
+                        <h3>Closed Won</h3>
+                        <div class="deal-cards" id="closed_won-deals"></div>
+                    </div>
+                    <div class="pipeline-stage" data-stage="closed_lost">
+                        <h3>Closed Lost</h3>
+                        <div class="deal-cards" id="closed_lost-deals"></div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Activities Section -->
+            <section id="activities" class="section">
+                <div class="section-header">
+                    <h2>Activities</h2>
+                    <div class="section-actions">
+                        <select class="form-control" id="activityTypeFilter">
+                            <option value="">All Types</option>
+                            <option value="call">Calls</option>
+                            <option value="email">Emails</option>
+                            <option value="meeting">Meetings</option>
+                            <option value="note">Notes</option>
+                        </select>
+                        <button class="btn btn--primary" id="addActivityModal">+ Add Activity</button>
+                    </div>
+                </div>
+                <div class="activities-timeline" id="activitiesTimeline">
+                </div>
+            </section>
+
+            <!-- Reports Section -->
+            <section id="reports" class="section">
+                <div class="section-header">
+                    <h2>Reports & Analytics</h2>
+                </div>
+                <div class="reports-grid">
+                    <div class="card">
+                        <div class="card__body">
+                            <h3>Sales Performance</h3>
+                            <div class="report-stats">
+                                <div class="stat">
+                                    <span class="stat-value" id="totalRevenue">$0</span>
+                                    <span class="stat-label">Total Revenue</span>
+                                </div>
+                                <div class="stat">
+                                    <span class="stat-value" id="avgDealSize">$0</span>
+                                    <span class="stat-label">Avg Deal Size</span>
+                                </div>
+                                <div class="stat">
+                                    <span class="stat-value" id="conversionRate">0%</span>
+                                    <span class="stat-label">Conversion Rate</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="card">
+                        <div class="card__body">
+                            <h3>Activity Summary</h3>
+                            <div class="report-stats">
+                                <div class="stat">
+                                    <span class="stat-value" id="totalActivities">0</span>
+                                    <span class="stat-label">Total Activities</span>
+                                </div>
+                                <div class="stat">
+                                    <span class="stat-value" id="completedActivities">0</span>
+                                    <span class="stat-label">Completed</span>
+                                </div>
+                                <div class="stat">
+                                    <span class="stat-value" id="pendingActivities">0</span>
+                                    <span class="stat-label">Pending</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- Contact Form Modal -->
+    <div id="contactModal" class="modal hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="contactModalTitle">Add Contact</h2>
+                <button class="modal-close" id="closeContactModal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <form id="contactForm">
+                    <input type="hidden" id="contactId">
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label class="form-label" for="contactFirstName">First Name</label>
+                            <input type="text" id="contactFirstName" class="form-control" required>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="contactLastName">Last Name</label>
+                            <input type="text" id="contactLastName" class="form-control" required>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="contactCompany">Company</label>
+                            <input type="text" id="contactCompany" class="form-control" required>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="contactTitle">Title</label>
+                            <input type="text" id="contactTitle" class="form-control">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="contactEmail">Email</label>
+                            <input type="email" id="contactEmail" class="form-control" required>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="contactPhone">Phone</label>
+                            <input type="tel" id="contactPhone" class="form-control">
+                        </div>
+                        <div class="form-group full-width">
+                            <label class="form-label" for="contactAddress">Address</label>
+                            <input type="text" id="contactAddress" class="form-control">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="contactSource">Source</label>
+                            <select id="contactSource" class="form-control">
+                                <option value="website">Website</option>
+                                <option value="referral">Referral</option>
+                                <option value="campaign">Campaign</option>
+                                <option value="social_media">Social Media</option>
+                                <option value="trade_show">Trade Show</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="contactTags">Tags (comma separated)</label>
+                            <input type="text" id="contactTags" class="form-control">
+                        </div>
+                        <div class="form-group full-width">
+                            <label class="form-label" for="contactNotes">Notes</label>
+                            <textarea id="contactNotes" class="form-control" rows="3"></textarea>
+                        </div>
+                    </div>
+                    <div class="form-actions">
+                        <button type="submit" class="btn btn--primary">Save Contact</button>
+                        <button type="button" class="btn btn--secondary" id="cancelContact">Cancel</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Lead Form Modal -->
+    <div id="leadModal" class="modal hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="leadModalTitle">Add Lead</h2>
+                <button class="modal-close" id="closeLeadModal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <form id="leadForm">
+                    <input type="hidden" id="leadId">
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label class="form-label" for="leadFirstName">First Name</label>
+                            <input type="text" id="leadFirstName" class="form-control" required>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="leadLastName">Last Name</label>
+                            <input type="text" id="leadLastName" class="form-control" required>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="leadCompany">Company</label>
+                            <input type="text" id="leadCompany" class="form-control" required>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="leadEmail">Email</label>
+                            <input type="email" id="leadEmail" class="form-control" required>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="leadPhone">Phone</label>
+                            <input type="tel" id="leadPhone" class="form-control">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="leadStatus">Status</label>
+                            <select id="leadStatus" class="form-control">
+                                <option value="new">New</option>
+                                <option value="contacted">Contacted</option>
+                                <option value="qualified">Qualified</option>
+                                <option value="lost">Lost</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="leadScore">Score</label>
+                            <select id="leadScore" class="form-control">
+                                <option value="hot">Hot</option>
+                                <option value="warm">Warm</option>
+                                <option value="cold">Cold</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="leadSource">Source</label>
+                            <select id="leadSource" class="form-control">
+                                <option value="website">Website</option>
+                                <option value="referral">Referral</option>
+                                <option value="campaign">Campaign</option>
+                                <option value="social_media">Social Media</option>
+                                <option value="trade_show">Trade Show</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="leadValue">Expected Value ($)</label>
+                            <input type="number" id="leadValue" class="form-control">
+                        </div>
+                        <div class="form-group full-width">
+                            <label class="form-label" for="leadNotes">Notes</label>
+                            <textarea id="leadNotes" class="form-control" rows="3"></textarea>
+                        </div>
+                    </div>
+                    <div class="form-actions">
+                        <button type="submit" class="btn btn--primary">Save Lead</button>
+                        <button type="button" class="btn btn--secondary" id="cancelLead">Cancel</button>
+                        <button type="button" class="btn btn--outline" id="convertToContact" style="display: none;">Convert to Contact</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Deal Form Modal -->
+    <div id="dealModal" class="modal hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="dealModalTitle">Add Deal</h2>
+                <button class="modal-close" id="closeDealModal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <form id="dealForm">
+                    <input type="hidden" id="dealId">
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label class="form-label" for="dealName">Deal Name</label>
+                            <input type="text" id="dealName" class="form-control" required>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="dealContact">Contact</label>
+                            <select id="dealContact" class="form-control" required>
+                                <option value="">Select Contact</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="dealValue">Deal Value ($)</label>
+                            <input type="number" id="dealValue" class="form-control" required>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="dealProbability">Probability (%)</label>
+                            <input type="number" id="dealProbability" class="form-control" min="0" max="100" required>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="dealStage">Stage</label>
+                            <select id="dealStage" class="form-control">
+                                <option value="prospecting">Prospecting</option>
+                                <option value="qualification">Qualification</option>
+                                <option value="proposal">Proposal</option>
+                                <option value="negotiation">Negotiation</option>
+                                <option value="closed_won">Closed Won</option>
+                                <option value="closed_lost">Closed Lost</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="dealCloseDate">Expected Close Date</label>
+                            <input type="date" id="dealCloseDate" class="form-control" required>
+                        </div>
+                        <div class="form-group full-width">
+                            <label class="form-label" for="dealNotes">Notes</label>
+                            <textarea id="dealNotes" class="form-control" rows="3"></textarea>
+                        </div>
+                    </div>
+                    <div class="form-actions">
+                        <button type="submit" class="btn btn--primary">Save Deal</button>
+                        <button type="button" class="btn btn--secondary" id="cancelDeal">Cancel</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Activity Form Modal -->
+    <div id="activityModal" class="modal hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="activityModalTitle">Add Activity</h2>
+                <button class="modal-close" id="closeActivityModal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <form id="activityForm">
+                    <input type="hidden" id="activityId">
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label class="form-label" for="activityType">Type</label>
+                            <select id="activityType" class="form-control" required>
+                                <option value="call">Call</option>
+                                <option value="email">Email</option>
+                                <option value="meeting">Meeting</option>
+                                <option value="note">Note</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="activitySubject">Subject</label>
+                            <input type="text" id="activitySubject" class="form-control" required>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="activityRelatedTo">Related To</label>
+                            <select id="activityRelatedTo" class="form-control" required>
+                                <option value="contact">Contact</option>
+                                <option value="lead">Lead</option>
+                                <option value="deal">Deal</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="activityRelatedId">Related Record</label>
+                            <select id="activityRelatedId" class="form-control" required>
+                                <option value="">Select Record</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="activityScheduledDate">Scheduled Date</label>
+                            <input type="datetime-local" id="activityScheduledDate" class="form-control" required>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">
+                                <input type="checkbox" id="activityCompleted"> Completed
+                            </label>
+                        </div>
+                        <div class="form-group full-width">
+                            <label class="form-label" for="activityDescription">Description</label>
+                            <textarea id="activityDescription" class="form-control" rows="3"></textarea>
+                        </div>
+                    </div>
+                    <div class="form-actions">
+                        <button type="submit" class="btn btn--primary">Save Activity</button>
+                        <button type="button" class="btn btn--secondary" id="cancelActivity">Cancel</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>

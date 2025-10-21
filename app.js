@@ -336,6 +336,43 @@ const initializeData = () => {
     };
 };
 
+// Persistence helpers (localStorage)
+const STORAGE_KEY = 'suchna_crm_app_state_v1';
+
+const saveAppState = () => {
+    try {
+        const toSave = {
+            currentUser: AppState.currentUser,
+            data: AppState.data
+        };
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(toSave));
+        // console.log('AppState saved to localStorage');
+    } catch (err) {
+        console.error('Failed to save AppState to localStorage', err);
+    }
+};
+
+const loadAppState = () => {
+    try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (!raw) {
+            // no saved state, initialize defaults
+            initializeData();
+            return;
+        }
+        const parsed = JSON.parse(raw);
+        if (parsed && parsed.data) {
+            AppState.data = parsed.data;
+            AppState.currentUser = parsed.currentUser || null;
+        } else {
+            initializeData();
+        }
+    } catch (err) {
+        console.error('Failed to load AppState from localStorage', err);
+        initializeData();
+    }
+};
+
 // Utility Functions
 const formatCurrency = (amount) => {
     return new Intl.NumberFormat('en-US', {
@@ -449,6 +486,7 @@ const AuthModule = {
             if (currentUserEl) currentUserEl.textContent = `${user.firstName} ${user.lastName}`;
             
             UIModule.showSection('dashboard');
+            saveAppState();
             return true;
         }
         return false;
@@ -467,14 +505,16 @@ const AuthModule = {
         };
         
         AppState.data.users.push(newUser);
-        return this.authenticate(userData.username, userData.password);
+        const ok = this.authenticate(userData.username, userData.password);
+        if (ok) saveAppState();
+        return ok;
     },
 
     logout() {
         AppState.currentUser = null;
         const app = document.getElementById('app');
         if (app) app.classList.add('hidden');
-        
+        saveAppState();
         this.showAuthModal();
         
         const authForm = document.getElementById('authForm');
@@ -547,11 +587,19 @@ const DashboardModule = {
     init() {
         console.log('Initializing dashboard');
         this.updateKPIs();
-        
-        // Wait for DOM to be ready before initializing charts
+
+        // Initialize charts after a short delay to ensure canvas elements exist
         setTimeout(() => {
-            this.initCharts();
+            this.updateCharts();
         }, 100);
+
+        // Optional live refresh every 8 seconds
+        if (this._refreshInterval == null) {
+            this._refreshInterval = setInterval(() => {
+                this.updateKPIs();
+                this.updateCharts();
+            }, 8000);
+        }
     },
 
     updateKPIs() {
@@ -561,12 +609,13 @@ const DashboardModule = {
         const revenueThisMonth = document.getElementById('revenueThisMonth');
         
         if (totalContacts) totalContacts.textContent = AppState.data.contacts.length;
-        if (activeLeads) activeLeads.textContent = AppState.data.leads.filter(l => l.status !== 'lost').length;
-        if (dealsInPipeline) dealsInPipeline.textContent = AppState.data.deals.filter(d => !['closed_won', 'closed_lost'].includes(d.stage)).length;
-        
-        const totalRevenue = AppState.data.deals
-            .filter(d => d.stage === 'closed_won')
-            .reduce((sum, deal) => sum + deal.value, 0);
+        // Active Leads = total leads
+        if (activeLeads) activeLeads.textContent = AppState.data.leads.length;
+        // Deals in Pipeline = total deals
+        if (dealsInPipeline) dealsInPipeline.textContent = AppState.data.deals.length;
+
+        // Revenue This Month = sum of all deal.value fields
+        const totalRevenue = AppState.data.deals.reduce((sum, deal) => sum + (Number(deal.value) || 0), 0);
         if (revenueThisMonth) revenueThisMonth.textContent = formatCurrency(totalRevenue);
     },
 
@@ -578,14 +627,27 @@ const DashboardModule = {
         this.initActivityChart();
     },
 
+    // Recreate all charts based on current AppState.data
+    updateCharts() {
+        // Destroy any existing charts
+        Object.keys(this.charts).forEach(key => {
+            if (this.charts[key] && typeof this.charts[key].destroy === 'function') {
+                try { this.charts[key].destroy(); } catch (e) { /* ignore */ }
+            }
+            this.charts[key] = null;
+        });
+
+        // Build new charts
+        this.initPipelineChart();
+        this.initRevenueChart();
+        this.initLeadSourceChart();
+        this.initActivityChart();
+    },
+
     initPipelineChart() {
         const ctx = document.getElementById('pipelineChart');
         if (!ctx) return;
         
-        if (this.charts.pipeline) {
-            this.charts.pipeline.destroy();
-        }
-
         const pipelineData = this.getPipelineData();
         
         this.charts.pipeline = new Chart(ctx, {
@@ -626,17 +688,16 @@ const DashboardModule = {
         const ctx = document.getElementById('revenueChart');
         if (!ctx) return;
         
-        if (this.charts.revenue) {
-            this.charts.revenue.destroy();
-        }
-        
+        // compute revenue by month from deals
+        const revenueByMonth = this.getRevenueByMonth();
+
         this.charts.revenue = new Chart(ctx, {
             type: 'line',
             data: {
-                labels: AppState.data.dashboardData.revenueData.labels,
+                labels: revenueByMonth.labels,
                 datasets: [{
                     label: 'Revenue',
-                    data: AppState.data.dashboardData.revenueData.data,
+                    data: revenueByMonth.data,
                     borderColor: '#1FB8CD',
                     backgroundColor: 'rgba(31, 184, 205, 0.1)',
                     tension: 0.4,
@@ -669,16 +730,14 @@ const DashboardModule = {
         const ctx = document.getElementById('leadSourceChart');
         if (!ctx) return;
         
-        if (this.charts.leadSource) {
-            this.charts.leadSource.destroy();
-        }
-        
+        const leadSourceData = this.getLeadSourceData();
+
         this.charts.leadSource = new Chart(ctx, {
             type: 'pie',
             data: {
-                labels: AppState.data.dashboardData.leadSourceData.labels,
+                labels: leadSourceData.labels,
                 datasets: [{
-                    data: AppState.data.dashboardData.leadSourceData.data,
+                    data: leadSourceData.data,
                     backgroundColor: ['#1FB8CD', '#FFC185', '#B4413C', '#ECEBD5', '#5D878F']
                 }]
             },
@@ -698,17 +757,15 @@ const DashboardModule = {
         const ctx = document.getElementById('activityChart');
         if (!ctx) return;
         
-        if (this.charts.activity) {
-            this.charts.activity.destroy();
-        }
-        
+        const activityData = this.getActivityData();
+
         this.charts.activity = new Chart(ctx, {
             type: 'bar',
             data: {
-                labels: AppState.data.dashboardData.activityData.labels,
+                labels: activityData.labels,
                 datasets: [{
                     label: 'Activities',
-                    data: AppState.data.dashboardData.activityData.data,
+                    data: activityData.data,
                     backgroundColor: ['#1FB8CD', '#FFC185', '#B4413C', '#ECEBD5']
                 }]
             },
@@ -739,6 +796,48 @@ const DashboardModule = {
         });
         
         return data;
+    },
+
+
+    getRevenueByMonth() {
+        // Prepare labels Jan..Dec
+        const labels = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+        const data = new Array(12).fill(0);
+
+        AppState.data.deals.forEach(deal => {
+            // Use createdAt or expectedCloseDate month for revenue attribution; prefer expectedCloseDate
+            const dateStr = deal.expectedCloseDate || deal.createdAt;
+            const d = new Date(dateStr);
+            if (!isNaN(d)) {
+                const m = d.getMonth();
+                data[m] += Number(deal.value) || 0;
+            }
+        });
+
+        return { labels, data };
+    },
+
+    getLeadSourceData() {
+        const map = {};
+        AppState.data.leads.forEach(lead => {
+            const src = (lead.source || 'unknown').toLowerCase();
+            map[src] = (map[src] || 0) + 1;
+        });
+        const labels = Object.keys(map).map(k => k.charAt(0).toUpperCase() + k.slice(1).replace('_',' '));
+        const data = Object.values(map);
+        return { labels, data };
+    },
+
+    getActivityData() {
+        const types = ['call','email','meeting','note'];
+        const map = { call:0, email:0, meeting:0, note:0 };
+        AppState.data.activities.forEach(a => {
+            const t = (a.type || 'note').toLowerCase();
+            map[t] = (map[t] || 0) + 1;
+        });
+        const labels = types.map(t => t.charAt(0).toUpperCase() + t.slice(1) + 's');
+        const data = types.map(t => map[t] || 0);
+        return { labels, data };
     }
 };
 
@@ -888,6 +987,8 @@ const ContactsModule = {
         this.hideModal();
         this.renderContacts();
         DashboardModule.updateKPIs();
+        ReportsModule.updateReports();
+        saveAppState();
     },
 
     deleteContact(contactId) {
@@ -895,6 +996,8 @@ const ContactsModule = {
             AppState.data.contacts = AppState.data.contacts.filter(c => c.id !== contactId);
             this.renderContacts();
             DashboardModule.updateKPIs();
+            ReportsModule.updateReports();
+            saveAppState();
         }
     },
 
@@ -1060,6 +1163,8 @@ const LeadsModule = {
         this.hideModal();
         this.renderLeads();
         DashboardModule.updateKPIs();
+        ReportsModule.updateReports();
+        saveAppState();
     },
 
     convertLead(leadId) {
@@ -1092,6 +1197,8 @@ const LeadsModule = {
             
             this.renderLeads();
             DashboardModule.updateKPIs();
+            ReportsModule.updateReports();
+            saveAppState();
             
             alert('Lead successfully converted to contact!');
         }
@@ -1102,6 +1209,8 @@ const LeadsModule = {
             AppState.data.leads = AppState.data.leads.filter(l => l.id !== leadId);
             this.renderLeads();
             DashboardModule.updateKPIs();
+            ReportsModule.updateReports();
+            saveAppState();
         }
     },
 
@@ -1205,7 +1314,9 @@ const DealsModule = {
             
             this.renderPipeline();
             DashboardModule.updateKPIs();
-            DashboardModule.initPipelineChart();
+            DashboardModule.updateCharts();
+            ReportsModule.updateReports();
+            saveAppState();
         }
     },
 
@@ -1301,7 +1412,9 @@ const DealsModule = {
         this.hideModal();
         this.renderPipeline();
         DashboardModule.updateKPIs();
-        DashboardModule.initPipelineChart();
+        DashboardModule.updateCharts();
+        ReportsModule.updateReports();
+        saveAppState();
     },
 
     deleteDeal(dealId) {
@@ -1309,7 +1422,9 @@ const DealsModule = {
             AppState.data.deals = AppState.data.deals.filter(d => d.id !== dealId);
             this.renderPipeline();
             DashboardModule.updateKPIs();
-            DashboardModule.initPipelineChart();
+            DashboardModule.updateCharts();
+            ReportsModule.updateReports();
+            saveAppState();
         }
     },
 
@@ -1459,6 +1574,10 @@ const ActivitiesModule = {
         
         this.hideModal();
         this.renderActivities();
+        DashboardModule.updateKPIs();
+        DashboardModule.updateCharts();
+        ReportsModule.updateReports();
+        saveAppState();
     },
 
     hideModal() {
@@ -1504,13 +1623,59 @@ const ReportsModule = {
         
         const pendingActivitiesEl = document.getElementById('pendingActivities');
         if (pendingActivitiesEl) pendingActivitiesEl.textContent = AppState.data.activities.filter(a => !a.completed).length;
+
+        // Sidebar / Reports totals: Total Contacts, Total Leads, Total Deals, Total Activities
+        const totals = {
+            contacts: AppState.data.contacts.length,
+            leads: AppState.data.leads.length,
+            deals: AppState.data.deals.length,
+            activities: AppState.data.activities.length
+        };
+
+        // Update or create a totals block inside the reports section
+        const reportsSection = document.getElementById('reports');
+        if (reportsSection) {
+            let totalsEl = document.getElementById('reportsTotals');
+            if (!totalsEl) {
+                totalsEl = document.createElement('div');
+                totalsEl.id = 'reportsTotals';
+                totalsEl.className = 'reports-totals';
+                totalsEl.style.marginBottom = '16px';
+                reportsSection.insertBefore(totalsEl, reportsSection.firstChild);
+            }
+
+            totalsEl.innerHTML = `
+                <div style="display:flex;gap:12px;flex-wrap:wrap;">
+                    <div class="stat"><div class="stat-value">${totals.contacts}</div><div class="stat-label">Total Contacts</div></div>
+                    <div class="stat"><div class="stat-value">${totals.leads}</div><div class="stat-label">Total Leads</div></div>
+                    <div class="stat"><div class="stat-value">${totals.deals}</div><div class="stat-label">Total Deals</div></div>
+                    <div class="stat"><div class="stat-value">${totals.activities}</div><div class="stat-label">Total Activities</div></div>
+                </div>
+            `;
+        }
+
+        // Update sidebar nav link for reports with compact counts
+        const reportsNav = document.querySelector('.nav-link[data-section="reports"]');
+        if (reportsNav) {
+            reportsNav.textContent = `📈 Reports (C:${totals.contacts} L:${totals.leads} D:${totals.deals} A:${totals.activities})`;
+        }
     }
 };
 
 // Event Listeners
 document.addEventListener('DOMContentLoaded', () => {
     console.log('DOM loaded, initializing app');
-    initializeData();
+    // Load saved state if present, otherwise initialize with sample data
+    loadAppState();
+    
+    // If a user was previously logged in, show the app immediately
+    if (AppState.currentUser) {
+        const app = document.getElementById('app');
+        const currentUserEl = document.getElementById('currentUser');
+        if (app) app.classList.remove('hidden');
+        if (currentUserEl) currentUserEl.textContent = `${AppState.currentUser.firstName} ${AppState.currentUser.lastName}`;
+        UIModule.showSection(AppState.currentSection || 'dashboard');
+    }
     
     // Auth form handler
     const authForm = document.getElementById('authForm');
@@ -1661,5 +1826,12 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // Show login modal initially
     console.log('Showing auth modal');
-    AuthModule.showAuthModal();
+    if (!AppState.currentUser) {
+        AuthModule.showAuthModal();
+    } else {
+        // Ensure reports and dashboard reflect loaded data
+        ReportsModule.updateReports();
+        DashboardModule.updateKPIs();
+        DashboardModule.updateCharts();
+    }
 });

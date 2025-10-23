@@ -1386,3 +1386,12 @@ select.form-control {
     gap: var(--space-16);
   }
 }
+
+#box2{
+  margin: top 50% ;
+  color: white;
+  font: bold 20px Arial;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
